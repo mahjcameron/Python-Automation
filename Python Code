@@ -1,0 +1,85 @@
+import pandas as pd
+from openpyxl import load_workbook
+from openpyxl.utils import get_column_letter
+
+# File paths
+input_path = 'SFUCS_ACCESS_06022025STG.xlsx'
+output_path = 'SFUCS_ACCESS_06022025STG_Cleaned.xlsx'
+
+# Step 1: Read the Excel file
+df = pd.read_excel(input_path, header=1)
+
+# Step 2: Clean column names - removes any extra spaces from column names
+df.columns = df.columns.str.strip()
+
+# Step 3: Sort by 'User'
+if 'User' not in df.columns:
+    raise KeyError("'User' column not found. Column names: " + str(df.columns.tolist())) #Ensure that User column exists and if doesn't shows the columns it sees
+df = df.sort_values(by='User', ascending=True) #Sorts by User Alphabetically
+
+# Step 4: Move 'User' next to 'ID'
+columns = df.columns.tolist()
+columns.remove('User')
+id_index = columns.index('ID')
+columns.insert(id_index + 1, 'User')
+df = df[columns]
+
+# Step 5: Drop unwanted columns
+columns_to_drop = [
+    'Empl Record', 'Sequence', 'Empl Class', 'Pay Status', 'Union Code',
+    'Dept Rollup', 'Dept ID', 'Job Code', 'Position',
+    'Action', 'Reason'
+]
+df = df.drop(columns=[col for col in columns_to_drop if col in df.columns])
+
+# Step 6: Insert 'Notes/Action' after 'User'
+user_index = df.columns.get_loc('User')
+df.insert(user_index + 1, 'Notes/Action', '')
+
+# Step 7: Insert 'Access' after 'Action Date'
+if 'Action Date' in df.columns:
+    action_date_index = df.columns.get_loc('Action Date')
+    df.insert(action_date_index + 1, 'Access', '')
+else:
+    print("'Action Date' not found — skipping 'Access' column insertion.")
+
+# Step 8: Create 'User Sheet'
+user_df = df[['User']].copy()
+user_df['User_Quoted'] = user_df['User'].apply(lambda x: f"'{x}'," if pd.notna(x) else '')
+
+# Step 9: Write the DataFrames to a new Excel file
+with pd.ExcelWriter(output_path, engine='openpyxl') as writer:
+    df.to_excel(writer, sheet_name='HAP', index=False)
+    user_df.to_excel(writer, sheet_name='User Sheet', index=False)
+
+# Step 10: Re-open with openpyxl and add the blank 'Access' sheet if needed
+book = load_workbook(output_path)
+if 'Access' not in book.sheetnames:
+    book.create_sheet('Access')
+    book.save(output_path)
+
+# Step 11: Add VLOOKUP formulas to 'Access' column in 'HAP'
+main_sheet = book['HAP']
+header_row = 2  # because pandas used header=1
+
+# Extract column headers from header row
+header_row = 1
+headers = {str(cell.value).strip(): idx + 1 for idx, cell in enumerate(main_sheet[header_row]) if cell.value is not None}
+print("📋 Headers found in 'HAP':", headers)
+
+user_col = headers.get('User')
+access_col = headers.get('Access')
+
+if user_col is None or access_col is None:
+    raise ValueError("🛑 Could not find 'User' or 'Access' column. Found headers: " + str(headers))
+
+# Add VLOOKUP formula to each row in Access column
+for row in range(header_row + 1, main_sheet.max_row + 1):
+    user_cell = f"{get_column_letter(user_col)}{row}"
+    access_cell = f"{get_column_letter(access_col)}{row}"
+    formula = f'=VLOOKUP({user_cell}, Access!$A$2:$F$3000, 6, FALSE)'
+    main_sheet[access_cell] = formula
+
+# Save the final version
+book.save(output_path)
+print("✅ Successfully created with VLOOKUPs:", output_path)
