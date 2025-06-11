@@ -6,6 +6,7 @@ Each Excel file included updates for employees who experienced changes to their 
 Pre-processing this excel document take considerable amount of time and with the amount of steps is prone to human error, in which this project would minimize both issues.
 
 ## Technical Need
+Develop a Python script to automate the following manual workflow, taking an input Excel file and generating a cleaned, formatted output file for ongoing use.
 1. The raw data required manual cleaning and reformatting to make it readable and suitable for further processing. This included:
  - Removing unnecessary columns
  - Adding new fields (e.g., “Notes/Action”, “Access”)
